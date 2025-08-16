@@ -31,6 +31,9 @@ li { background: #fff; padding: 10px; margin-bottom: 10px; border-radius: 6px; b
 /* Список автомобилей с кнопками удаления */
 .car-item { display: flex; justify-content: space-between; margin-bottom: 5px; }
 .car-item button { background:#e74c3c; color:white; border:none; padding:5px 10px; border-radius:5px; cursor:pointer; }
+
+/* Статистика затрат */
+#statsContainer { margin-top: 20px; background: #fff; padding: 10px; border-radius: 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
 </style>
 </head>
 <body>
@@ -58,6 +61,12 @@ li { background: #fff; padding: 10px; margin-bottom: 10px; border-radius: 6px; b
 
 <ul id="recordsList"></ul>
 
+<h3>Статистика затрат</h3>
+<div id="statsContainer">
+  <p id="totalCost">Общая сумма: 0 грн</p>
+  <div id="monthlyCost"></div>
+</div>
+
 <script>
 // Элементы
 const carNameInput = document.getElementById('carName');
@@ -72,6 +81,8 @@ const reminderDateInput = document.getElementById('reminderDate');
 const addRecordBtn = document.getElementById('addRecord');
 const recordsList = document.getElementById('recordsList');
 const carListContainer = document.getElementById('carListContainer');
+const totalCostEl = document.getElementById('totalCost');
+const monthlyCostEl = document.getElementById('monthlyCost');
 
 // Данные
 let cars = JSON.parse(localStorage.getItem('cars') || '[]');
@@ -100,4 +111,176 @@ function updateCarSelect() {
         localStorage.setItem('cars', JSON.stringify(cars));
         // Удаляем его записи
         delete recordsByCar[car.id];
-        localStorage.setItem('records
+        localStorage.setItem('recordsByCar', JSON.stringify(recordsByCar));
+        // Сбрасываем выбор и список записей, если выбран удаляемый автомобиль
+        if (carSelect.value === car.id) {
+          carSelect.value = '';
+          recordsList.innerHTML = '';
+        }
+        updateCarSelect();
+        renderRecords();
+      }
+    });
+    carListContainer.appendChild(div);
+  });
+}
+
+function renderRecords() {
+  const selectedCarId = carSelect.value;
+  recordsList.innerHTML = '';
+  if (!selectedCarId || !recordsByCar[selectedCarId]) {
+    updateStats();
+    return;
+  }
+  recordsByCar[selectedCarId].forEach(r => {
+    const li = document.createElement('li');
+    li.dataset.id = r.id;
+    li.innerHTML = `
+      <div class="record-info">
+        <strong>${r.service}</strong><br>
+        Пробег: ${r.mileage} км<br>
+        Стоимость: ${r.cost} грн<br>
+        Дата напоминания: ${r.reminderDate || 'не указана'}
+      </div>
+      <button class="delete-btn">Удалить</button>
+    `;
+    recordsList.appendChild(li);
+  });
+  updateStats();
+}
+
+// Добавление автомобиля
+addCarBtn.addEventListener('click', () => {
+  const name = carNameInput.value.trim();
+  const year = carYearInput.value.trim();
+  const number = carNumberInput.value.trim();
+  if (!name || !year || !number) {
+    alert("Заполните все поля для автомобиля!");
+    return;
+  }
+  const newCar = { id: Date.now().toString(), name, year, number };
+  cars.push(newCar);
+  localStorage.setItem('cars', JSON.stringify(cars));
+  carNameInput.value = carYearInput.value = carNumberInput.value = '';
+  updateCarSelect();
+});
+
+// Добавление записи
+addRecordBtn.addEventListener('click', () => {
+  const carId = carSelect.value;
+  const service = serviceInput.value.trim();
+  const mileage = mileageInput.value.trim();
+  const cost = costInput.value.trim();
+  const reminderDate = reminderDateInput.value;
+  if (!carId || !service || !mileage || !cost) {
+    alert("Заполните все поля для записи!");
+    return;
+  }
+  const newRecord = {
+    id: Date.now().toString(),
+    service,
+    mileage,
+    cost,
+    reminderDate,
+    notified: false
+  };
+  if (!recordsByCar[carId]) recordsByCar[carId] = [];
+  recordsByCar[carId].push(newRecord);
+  localStorage.setItem('recordsByCar', JSON.stringify(recordsByCar));
+  serviceInput.value = mileageInput.value = costInput.value = reminderDateInput.value = '';
+  renderRecords();
+});
+
+// Удаление записи
+recordsList.addEventListener('click', e => {
+  if (e.target.classList.contains('delete-btn')) {
+    const li = e.target.closest('li');
+    const id = li.dataset.id;
+    const carId = carSelect.value;
+    recordsByCar[carId] = recordsByCar[carId].filter(r => r.id !== id);
+    localStorage.setItem('recordsByCar', JSON.stringify(recordsByCar));
+    renderRecords();
+  }
+});
+
+// Всплывающее уведомление внутри страницы
+function showInPageNotification(message) {
+  const notif = document.createElement('div');
+  notif.textContent = message;
+  notif.className = 'inpage-notif';
+  document.body.appendChild(notif);
+  setTimeout(() => notif.remove(), 5000);
+}
+
+// Проверка уведомлений (ПК + мобильные)
+function checkNotifications() {
+  const today = new Date().toISOString().split('T')[0];
+  cars.forEach(car => {
+    const records = recordsByCar[car.id] || [];
+    records.forEach(r => {
+      if (r.reminderDate && r.reminderDate <= today && !r.notified) {
+        // Системное уведомление (ПК)
+        if ("Notification" in window && Notification.permission === "granted") {
+          new Notification("Напоминание о ТО", {
+            body: `${r.service} для ${car.name} (${car.number}). Стоимость: ${r.cost} грн`
+          });
+        } else {
+          // Всплывающее уведомление на странице (мобильные)
+          showInPageNotification(`Напоминание: ${r.service} для ${car.name} (${car.number}). Стоимость: ${r.cost} грн`);
+        }
+        r.notified = true;
+      }
+    });
+  });
+  localStorage.setItem('recordsByCar', JSON.stringify(recordsByCar));
+}
+
+// Статистика затрат
+function updateStats() {
+  const selectedCarId = carSelect.value;
+  monthlyCostEl.innerHTML = '';
+  
+  if (!selectedCarId || !recordsByCar[selectedCarId] || recordsByCar[selectedCarId].length === 0) {
+    totalCostEl.textContent = 'Общая сумма: 0 грн';
+    return;
+  }
+
+  const records = recordsByCar[selectedCarId];
+  let total = 0;
+  const monthly = {};
+
+  records.forEach(r => {
+    const cost = parseFloat(r.cost) || 0;
+    total += cost;
+    if (r.reminderDate) {
+      const month = r.reminderDate.slice(0,7); // yyyy-mm
+      if (!monthly[month]) monthly[month] = 0;
+      monthly[month] += cost;
+    }
+  });
+
+  totalCostEl.textContent = `Общая сумма: ${total} грн`;
+
+  for (const month in monthly) {
+    const p = document.createElement('p');
+    p.textContent = `${month}: ${monthly[month]} грн`;
+    monthlyCostEl.appendChild(p);
+  }
+}
+
+// Инициализация
+window.onload = () => {
+  updateCarSelect();
+  renderRecords();
+  if ("Notification" in window && Notification.permission !== "granted") {
+    Notification.requestPermission();
+  }
+  setInterval(checkNotifications, 30000);
+};
+
+// Обновление списка записей при смене автомобиля
+carSelect.addEventListener('change', renderRecords);
+</script>
+
+</body>
+</html>
