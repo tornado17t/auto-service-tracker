@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Авто-Сервис Трекер</title>
+<style>
+body { font-family: Arial, sans-serif; padding: 20px; background: #f4f4f9; }
+h1 { text-align: center; margin-bottom: 20px; }
+input, select, button { padding: 10px; margin: 5px 0; width: 100%; box-sizing: border-box; border-radius: 5px; border: 1px solid #ccc; }
+button { cursor: pointer; }
+ul { list-style: none; padding: 0; margin-top: 20px; }
+li { background: #fff; padding: 10px; margin-bottom: 10px; border-radius: 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
+.record-info { flex: 1; }
+.delete-btn { background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<h1>Авто-Сервис Трекер</h1>
+
+<h3>Добавить автомобиль</h3>
+<input type="text" id="carName" placeholder="Название машины">
+<input type="number" id="carYear" placeholder="Год выпуска">
+<input type="text" id="carNumber" placeholder="Номер машины">
+<button id="addCarBtn">Добавить автомобиль</button>
+
+<h3>Добавить запись по сервису</h3>
+<select id="carSelect">
+  <option value="">Выберите автомобиль</option>
+</select>
+<input type="text" id="service" placeholder="Работа (например: замена масла)">
+<input type="number" id="mileage" placeholder="Пробег (км)">
+<button id="addRecord">Добавить запись</button>
+<button id="notifyBtn">Установить напоминание</button>
+
+<ul id="recordsList"></ul>
+
+<script>
+// Элементы
+const carNameInput = document.getElementById('carName');
+const carYearInput = document.getElementById('carYear');
+const carNumberInput = document.getElementById('carNumber');
+const addCarBtn = document.getElementById('addCarBtn');
+const carSelect = document.getElementById('carSelect');
+const serviceInput = document.getElementById('service');
+const mileageInput = document.getElementById('mileage');
+const addRecordBtn = document.getElementById('addRecord');
+const notifyBtn = document.getElementById('notifyBtn');
+const recordsList = document.getElementById('recordsList');
+
+// Данные
+let cars = JSON.parse(localStorage.getItem('cars') || '[]');
+let recordsByCar = JSON.parse(localStorage.getItem('recordsByCar') || '{}');
+
+// Функции
+function updateCarSelect() {
+  carSelect.innerHTML = '<option value="">Выберите автомобиль</option>';
+  cars.forEach(car => {
+    const option = document.createElement('option');
+    option.value = car.id;
+    option.textContent = `${car.name} (${car.year}) [${car.number}]`;
+    carSelect.appendChild(option);
+  });
+}
+
+function renderRecords() {
+  const selectedCarId = carSelect.value;
+  recordsList.innerHTML = '';
+  if (!selectedCarId || !recordsByCar[selectedCarId]) return;
+  recordsByCar[selectedCarId].forEach(r => {
+    const li = document.createElement('li');
+    li.dataset.id = r.id;
+    li.innerHTML = `
+      <div class="record-info">
+        <strong>${r.service}</strong><br>
+        Пробег: ${r.mileage} км<br>
+        Дата: ${r.date}
+      </div>
+      <button class="delete-btn">Удалить</button>
+    `;
+    recordsList.appendChild(li);
+  });
+}
+
+// Добавление автомобиля
+addCarBtn.addEventListener('click', () => {
+  const name = carNameInput.value.trim();
+  const year = carYearInput.value.trim();
+  const number = carNumberInput.value.trim();
+  if (!name || !year || !number) {
+    alert("Заполните все поля для автомобиля!");
+    return;
+  }
+  const newCar = { id: Date.now().toString(), name, year, number };
+  cars.push(newCar);
+  localStorage.setItem('cars', JSON.stringify(cars));
+  carNameInput.value = carYearInput.value = carNumberInput.value = '';
+  updateCarSelect();
+});
+
+// Добавление записи
+addRecordBtn.addEventListener('click', () => {
+  const carId = carSelect.value;
+  const service = serviceInput.value.trim();
+  const mileage = mileageInput.value.trim();
+  if (!carId || !service || !mileage) {
+    alert("Заполните все поля для записи!");
+    return;
+  }
+  const newRecord = { id: Date.now().toString(), service, mileage, date: new Date().toLocaleDateString() };
+  if (!recordsByCar[carId]) recordsByCar[carId] = [];
+  recordsByCar[carId].push(newRecord);
+  localStorage.setItem('recordsByCar', JSON.stringify(recordsByCar));
+  serviceInput.value = mileageInput.value = '';
+  renderRecords();
+});
+
+// Удаление записи
+recordsList.addEventListener('click', e => {
+  if (e.target.classList.contains('delete-btn')) {
+    const li = e.target.closest('li');
+    const id = li.dataset.id;
+    const carId = carSelect.value;
+    recordsByCar[carId] = recordsByCar[carId].filter(r => r.id !== id);
+    localStorage.setItem('recordsByCar', JSON.stringify(recordsByCar));
+    renderRecords();
+  }
+});
+
+// Напоминание
+notifyBtn.addEventListener('click', () => {
+  const carId = carSelect.value;
+  if (!carId) { alert("Выберите автомобиль для напоминания"); return; }
+  if (!("Notification" in window)) { alert("Браузер не поддерживает уведомления."); return; }
+  Notification.requestPermission().then(permission => {
+    if (permission === "granted") {
+      setTimeout(() => {
+        const car = cars.find(c => c.id === carId);
+        new Notification("Напоминание о ТО", { body: `Пора проверить автомобиль: ${car.name} (${car.number})` });
+      }, 5000);
+      alert("Напоминание установлено!");
+    }
+  });
+});
+
+// Обновление списка записей при смене автомобиля
+carSelect.addEventListener('change', renderRecords);
+
+// Инициализация
+updateCarSelect();
+renderRecords();
+</script>
+
+</body>
+</html>
