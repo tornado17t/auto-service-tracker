@@ -13,6 +13,20 @@ ul { list-style: none; padding: 0; margin-top: 20px; }
 li { background: #fff; padding: 10px; margin-bottom: 10px; border-radius: 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
 .record-info { flex: 1; }
 .delete-btn { background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; }
+
+/* Всплывающее уведомление внутри страницы */
+.inpage-notif {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #2ecc71;
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 5px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  z-index: 1000;
+}
 </style>
 </head>
 <body>
@@ -140,18 +154,31 @@ recordsList.addEventListener('click', e => {
   }
 });
 
-// Проверка уведомлений
+// Всплывающее уведомление внутри страницы
+function showInPageNotification(message) {
+  const notif = document.createElement('div');
+  notif.textContent = message;
+  notif.className = 'inpage-notif';
+  document.body.appendChild(notif);
+  setTimeout(() => notif.remove(), 5000);
+}
+
+// Проверка уведомлений (ПК + мобильные)
 function checkNotifications() {
-  if (!("Notification" in window)) return;
-  if (Notification.permission !== "granted") return;
   const today = new Date().toISOString().split('T')[0];
   cars.forEach(car => {
     const records = recordsByCar[car.id] || [];
     records.forEach(r => {
       if (r.reminderDate && r.reminderDate <= today && !r.notified) {
-        new Notification("Напоминание о ТО", {
-          body: `${r.service} для ${car.name} (${car.number}). Стоимость: ${r.cost} грн`
-        });
+        // Системное уведомление (ПК)
+        if ("Notification" in window && Notification.permission === "granted") {
+          new Notification("Напоминание о ТО", {
+            body: `${r.service} для ${car.name} (${car.number}). Стоимость: ${r.cost} грн`
+          });
+        } else {
+          // Всплывающее уведомление на странице (мобильные)
+          showInPageNotification(`Напоминание: ${r.service} для ${car.name} (${car.number}). Стоимость: ${r.cost} грн`);
+        }
         r.notified = true;
       }
     });
@@ -159,14 +186,13 @@ function checkNotifications() {
   localStorage.setItem('recordsByCar', JSON.stringify(recordsByCar));
 }
 
-// Запрос разрешения на уведомления при загрузке
+// Инициализация
 window.onload = () => {
   updateCarSelect();
   renderRecords();
   if ("Notification" in window && Notification.permission !== "granted") {
     Notification.requestPermission();
   }
-  // Проверка уведомлений каждые 30 секунд
   setInterval(checkNotifications, 30000);
 };
 
