@@ -31,8 +31,9 @@ li { background: #fff; padding: 10px; margin-bottom: 10px; border-radius: 6px; b
 </select>
 <input type="text" id="service" placeholder="Работа (например: замена масла)">
 <input type="number" id="mileage" placeholder="Пробег (км)">
+<input type="number" id="cost" placeholder="Стоимость работы (грн)">
+<input type="date" id="reminderDate" placeholder="Дата напоминания">
 <button id="addRecord">Добавить запись</button>
-<button id="notifyBtn">Установить напоминание</button>
 
 <ul id="recordsList"></ul>
 
@@ -45,8 +46,9 @@ const addCarBtn = document.getElementById('addCarBtn');
 const carSelect = document.getElementById('carSelect');
 const serviceInput = document.getElementById('service');
 const mileageInput = document.getElementById('mileage');
+const costInput = document.getElementById('cost');
+const reminderDateInput = document.getElementById('reminderDate');
 const addRecordBtn = document.getElementById('addRecord');
-const notifyBtn = document.getElementById('notifyBtn');
 const recordsList = document.getElementById('recordsList');
 
 // Данные
@@ -75,7 +77,8 @@ function renderRecords() {
       <div class="record-info">
         <strong>${r.service}</strong><br>
         Пробег: ${r.mileage} км<br>
-        Дата: ${r.date}
+        Стоимость: ${r.cost} грн<br>
+        Дата напоминания: ${r.reminderDate || 'не указана'}
       </div>
       <button class="delete-btn">Удалить</button>
     `;
@@ -104,15 +107,24 @@ addRecordBtn.addEventListener('click', () => {
   const carId = carSelect.value;
   const service = serviceInput.value.trim();
   const mileage = mileageInput.value.trim();
-  if (!carId || !service || !mileage) {
+  const cost = costInput.value.trim();
+  const reminderDate = reminderDateInput.value;
+  if (!carId || !service || !mileage || !cost) {
     alert("Заполните все поля для записи!");
     return;
   }
-  const newRecord = { id: Date.now().toString(), service, mileage, date: new Date().toLocaleDateString() };
+  const newRecord = {
+    id: Date.now().toString(),
+    service,
+    mileage,
+    cost,
+    reminderDate,
+    notified: false
+  };
   if (!recordsByCar[carId]) recordsByCar[carId] = [];
   recordsByCar[carId].push(newRecord);
   localStorage.setItem('recordsByCar', JSON.stringify(recordsByCar));
-  serviceInput.value = mileageInput.value = '';
+  serviceInput.value = mileageInput.value = costInput.value = reminderDateInput.value = '';
   renderRecords();
 });
 
@@ -128,28 +140,38 @@ recordsList.addEventListener('click', e => {
   }
 });
 
-// Напоминание
-notifyBtn.addEventListener('click', () => {
-  const carId = carSelect.value;
-  if (!carId) { alert("Выберите автомобиль для напоминания"); return; }
-  if (!("Notification" in window)) { alert("Браузер не поддерживает уведомления."); return; }
-  Notification.requestPermission().then(permission => {
-    if (permission === "granted") {
-      setTimeout(() => {
-        const car = cars.find(c => c.id === carId);
-        new Notification("Напоминание о ТО", { body: `Пора проверить автомобиль: ${car.name} (${car.number})` });
-      }, 5000);
-      alert("Напоминание установлено!");
-    }
+// Проверка уведомлений
+function checkNotifications() {
+  if (!("Notification" in window)) return;
+  if (Notification.permission !== "granted") return;
+  const today = new Date().toISOString().split('T')[0];
+  cars.forEach(car => {
+    const records = recordsByCar[car.id] || [];
+    records.forEach(r => {
+      if (r.reminderDate && r.reminderDate <= today && !r.notified) {
+        new Notification("Напоминание о ТО", {
+          body: `${r.service} для ${car.name} (${car.number}). Стоимость: ${r.cost} грн`
+        });
+        r.notified = true;
+      }
+    });
   });
-});
+  localStorage.setItem('recordsByCar', JSON.stringify(recordsByCar));
+}
+
+// Запрос разрешения на уведомления при загрузке
+window.onload = () => {
+  updateCarSelect();
+  renderRecords();
+  if ("Notification" in window && Notification.permission !== "granted") {
+    Notification.requestPermission();
+  }
+  // Проверка уведомлений каждые 30 секунд
+  setInterval(checkNotifications, 30000);
+};
 
 // Обновление списка записей при смене автомобиля
 carSelect.addEventListener('change', renderRecords);
-
-// Инициализация
-updateCarSelect();
-renderRecords();
 </script>
 
 </body>
